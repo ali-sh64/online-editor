@@ -1,26 +1,76 @@
-version: '3'
+version: '3.3'
 services:
-  web:
-    build: .
-    ports:
-      - "3001:80"
-  docker:
-    image: docker:dind
-    privileged: true
-    volumes:
-      - data:/tmp
-      - image:/var/lib/docker
-  api:
-    image: ugwis/online-compiler:master
-    ports:
-      - 3000:8080
-    links:
-      - docker
+  nginxpm:
+    image: jc21/nginx-proxy-manager:latest
     environment:
-      - DOCKER_HOST=tcp://docker:2375
+      DISABLE_IPV6: 'true'
+    ports:
+     - 80:80
+     - 81:81
+     - 443:443
     volumes:
-      - data:/tmp
-
+     - /mnt/nginxpm/config.json:/app/config/production.json
+     - /mnt/nginxpm/data:/data
+     - /mnt/letsencrypt:/etc/letsencrypt
+    networks:
+     - data
+     - front
+     - odoo
+    logging:
+      driver: none
+    deploy:
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+         - node.labels.isGatewayNode == yes
+  odoo14:
+    image: odoo:14.0
+    environment:
+      test: test
+    volumes:
+     - /mnt/odoo/data:/var/lib/odoo
+     - /mnt/odoo/addons-14:/mnt/extra-addons
+     - /mnt/odoo/odoo-14.conf:/etc/odoo/odoo.conf
+    networks:
+     - data
+     - front
+    logging:
+      driver: none
+    deploy:
+      restart_policy:
+        condition: on-failure
+  postgres13:
+    image: postgres:13
+    labels:
+      com.dgyar.department: IT
+      com.dgyar.description: Data node
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: odoo
+      POSTGRES_USER: odoo
+    volumes:
+     - /mnt/odoo/postgresql:/var/lib/postgresql/data/pgdata
+    networks:
+     - data
+    logging:
+      driver: none
+    deploy:
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+         - node.labels.isDataNode == yes        
 volumes:
   data:
   image:
+networks:
+  data:
+    external: true
+  front:
+    external: true
+  odoo:
+    external: true
+
+
